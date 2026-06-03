@@ -1,0 +1,10 @@
+{
+  "id": "reorderable",
+  "name": "Reorderable Lists",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Drag and drop to reorder list items in the editor.",
+  "author": "hosikiti",
+  "authorUrl": "https://github.com/hosikiti",
+  "isDesktopOnly": true
+}
