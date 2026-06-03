@@ -13,8 +13,8 @@
   color: var(--text-muted);
 }
 
-.reorderable-handle:hover {
-  color: var(--text-normal) !important;
+.cm-line:hover .reorderable-handle:hover {
+  color: var(--text-normal);
 }
 
 .reorderable-handle:active {
