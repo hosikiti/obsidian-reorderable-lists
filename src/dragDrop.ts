@@ -167,7 +167,14 @@ class ReorderPlugin implements PluginValue {
     activeDrag = null;
   }
 
+  private isLivePreview(view: EditorView): boolean {
+    // Obsidian adds .cm-contenteditable to live preview and .cm-sourceMode to source mode
+    return !view.dom.closest(".cm-sourceMode");
+  }
+
   private buildDecorations(view: EditorView): DecorationSet {
+    if (!this.isLivePreview(view)) return Decoration.none;
+
     const widgets: Range<Decoration>[] = [];
     const { from, to } = view.viewport;
     const doc = view.state.doc;
