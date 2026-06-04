@@ -8,6 +8,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { Range } from "@codemirror/state";
+import { editorLivePreviewField } from "obsidian";
 
 import type { ReorderableSettings } from "./main";
 
@@ -168,8 +169,7 @@ class ReorderPlugin implements PluginValue {
   }
 
   private isLivePreview(view: EditorView): boolean {
-    // Obsidian adds .cm-contenteditable to live preview and .cm-sourceMode to source mode
-    return !view.dom.closest(".cm-sourceMode");
+    return view.state.field(editorLivePreviewField, false) === true;
   }
 
   private buildDecorations(view: EditorView): DecorationSet {
