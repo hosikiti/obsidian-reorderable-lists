@@ -1,7 +1,24 @@
+/* Handle: beginning of line (default) */
 .reorderable-handle {
   display: inline-block;
   width: 1em;
   margin-left: -1.2em;
+  color: transparent;
+  cursor: grab;
+  user-select: none;
+  font-size: 0.85em;
+  vertical-align: middle;
+}
+
+/* Handle: before bullet marker — absolutely positioned so it doesn't affect layout */
+.cm-line:has(.reorderable-handle--inline) {
+  position: relative;
+}
+
+.reorderable-handle.reorderable-handle--inline {
+  margin-left: 0;
+  display: inline-block;
+  width: 1em;
   color: transparent;
   cursor: grab;
   user-select: none;

@@ -9,23 +9,42 @@ import {
 } from "@codemirror/view";
 import { Range } from "@codemirror/state";
 
+import type { ReorderableSettings } from "./main";
+
 const LIST_ITEM_RE = /^(\s*)([-*+]|\d+[.)]) /;
+
+let currentSettings: ReorderableSettings = { ghostImage: true, handlePosition: "beginning", handleOffset: 1.4 };
+let activePlugin: ReorderPlugin | null = null;
+
+export function setSettings(s: ReorderableSettings) {
+  currentSettings = s;
+  // Force decoration rebuild on all active editor instances
+  activePlugin?.forceRedecorate();
+}
 
 // ── Drag handle widget ────────────────────────────────────────────────────────
 
 class DragHandleWidget extends WidgetType {
-  eq(other: DragHandleWidget) { return true; }
+  constructor(private inline = false, private offset = 1.4) { super(); }
+
+  eq(other: DragHandleWidget) {
+    return other.inline === this.inline && other.offset === this.offset;
+  }
 
   toDOM() {
     const el = document.createElement("span");
-    el.className = "reorderable-handle";
+    el.className = "reorderable-handle" + (this.inline ? " reorderable-handle--inline" : "");
     el.setAttribute("aria-hidden", "true");
     el.draggable = true;
     el.textContent = "⠿";
+    if (this.inline) {
+      el.style.position = "absolute";
+      el.style.top = "50%";
+      el.style.transform = `translateY(-50%) translateX(calc(-100% - ${this.offset}em))`;
+    }
     return el;
   }
 
-  // Pass all events through so dragstart fires on the element
   ignoreEvent() { return false; }
 }
 
@@ -127,15 +146,22 @@ class ReorderPlugin implements PluginValue {
   constructor(private view: EditorView) {
     this.decorations = this.buildDecorations(view);
     this.attachHandlers();
+    activePlugin = this;
+  }
+
+  forceRedecorate() {
+    this.decorations = this.buildDecorations(this.view);
+    this.view.dispatch({});
   }
 
   update(update: ViewUpdate) {
-    if (update.docChanged || update.viewportChanged) {
+    if (update.docChanged || update.viewportChanged || update.transactions.length) {
       this.decorations = this.buildDecorations(update.view);
     }
   }
 
   destroy() {
+    if (activePlugin === this) activePlugin = null;
     this.cleanup.forEach((fn) => fn());
     activeDrag?.indicator.remove();
     activeDrag = null;
@@ -145,15 +171,25 @@ class ReorderPlugin implements PluginValue {
     const widgets: Range<Decoration>[] = [];
     const { from, to } = view.viewport;
     const doc = view.state.doc;
-    const handle = new DragHandleWidget();
+    const nextToBullet = currentSettings.handlePosition === "next-to-bullet";
 
     let pos = from;
     while (pos <= to) {
       const line = doc.lineAt(pos);
-      if (LIST_ITEM_RE.test(line.text)) {
-        widgets.push(
-          Decoration.widget({ widget: handle, side: -1 }).range(line.from)
-        );
+      const match = LIST_ITEM_RE.exec(line.text);
+      if (match) {
+        if (nextToBullet) {
+          const indentLen = match[1].length;
+          widgets.push(
+            Decoration.widget({ widget: new DragHandleWidget(true, currentSettings.handleOffset), side: -1 })
+              .range(line.from + indentLen)
+          );
+        } else {
+          widgets.push(
+            Decoration.widget({ widget: new DragHandleWidget(false), side: -1 })
+              .range(line.from)
+          );
+        }
       }
       pos = line.to + 1;
     }
@@ -184,11 +220,30 @@ class ReorderPlugin implements PluginValue {
       const handle = (e.target as HTMLElement).closest(".reorderable-handle");
       if (!handle || pendingFromLine === null) return;
 
-      // Suppress browser's default "drag the text content" ghost
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = "move";
-        // Empty string so no text leaks into the drop target
         e.dataTransfer.setData("application/x-reorderable", String(pendingFromLine));
+
+        // Build a custom ghost: clone the source .cm-line at 50% opacity
+        const lineEl = handle.closest(".cm-line") as HTMLElement | null;
+        if (lineEl && currentSettings.ghostImage) {
+          const ghost = lineEl.cloneNode(true) as HTMLElement;
+          ghost.style.cssText = `
+            position: fixed;
+            top: -9999px;
+            left: -9999px;
+            width: ${lineEl.offsetWidth}px;
+            opacity: 0.5;
+            background: var(--background-primary);
+            padding: ${getComputedStyle(lineEl).padding};
+            font: ${getComputedStyle(lineEl).font};
+            pointer-events: none;
+          `;
+          document.body.appendChild(ghost);
+          e.dataTransfer.setDragImage(ghost, 0, lineEl.offsetHeight / 2);
+          // Remove after browser has snapshotted it
+          requestAnimationFrame(() => ghost.remove());
+        }
       }
 
       const indicator = document.createElement("div");
