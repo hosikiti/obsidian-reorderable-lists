@@ -6,13 +6,15 @@ export type HandlePosition = "beginning" | "next-to-bullet";
 export interface ReorderableSettings {
   ghostImage: boolean;
   handlePosition: HandlePosition;
-  handleOffset: number; // em units, applied as negative margin-left for "before bullet marker"
+  handleOffset: number;
+  handleOffsetWithChildren: number;
 }
 
 const DEFAULT_SETTINGS: ReorderableSettings = {
   ghostImage: true,
   handlePosition: "beginning",
   handleOffset: 1.4,
+  handleOffsetWithChildren: 2.2,
 };
 
 export default class ReorderablePlugin extends Plugin {
@@ -69,16 +71,18 @@ class ReorderableSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.handlePosition = value as HandlePosition;
             await this.plugin.saveSettings();
-            offsetSetting.settingEl.toggle(value === "next-to-bullet");
+            const show = value === "next-to-bullet";
+            offsetSetting.settingEl.toggle(show);
+            offsetWithChildrenSetting.settingEl.toggle(show);
           })
       );
 
     const offsetSetting = new Setting(containerEl)
       .setName("Handle offset")
-      .setDesc("How far left (in em) to shift the handle away from the bullet marker.")
+      .setDesc("Gap (in em) between the handle and the bullet marker.")
       .addSlider((slider) =>
         slider
-          .setLimits(0.5, 3, 0.1)
+          .setLimits(0.1, 3, 0.1)
           .setValue(this.plugin.settings.handleOffset)
           .setDynamicTooltip()
           .onChange(async (value) => {
@@ -87,7 +91,22 @@ class ReorderableSettingTab extends PluginSettingTab {
           })
       );
 
-    // Only show offset setting when "before bullet marker" is selected
-    offsetSetting.settingEl.toggle(this.plugin.settings.handlePosition === "next-to-bullet");
+    const offsetWithChildrenSetting = new Setting(containerEl)
+      .setName("Handle offset (items with sub-items)")
+      .setDesc("Gap (in em) for items that have children, which show a collapse arrow (›).")
+      .addSlider((slider) =>
+        slider
+          .setLimits(0.1, 3, 0.1)
+          .setValue(this.plugin.settings.handleOffsetWithChildren)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.handleOffsetWithChildren = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    const isInline = this.plugin.settings.handlePosition === "next-to-bullet";
+    offsetSetting.settingEl.toggle(isInline);
+    offsetWithChildrenSetting.settingEl.toggle(isInline);
   }
 }

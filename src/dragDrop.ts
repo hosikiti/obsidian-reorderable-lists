@@ -8,12 +8,13 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import { Range } from "@codemirror/state";
+import { editorLivePreviewField } from "obsidian";
 
 import type { ReorderableSettings } from "./main";
 
 const LIST_ITEM_RE = /^(\s*)([-*+]|\d+[.)]) /;
 
-let currentSettings: ReorderableSettings = { ghostImage: true, handlePosition: "beginning", handleOffset: 1.4 };
+let currentSettings: ReorderableSettings = { ghostImage: true, handlePosition: "beginning", handleOffset: 1.4, handleOffsetWithChildren: 2.2 };
 let activePlugin: ReorderPlugin | null = null;
 
 export function setSettings(s: ReorderableSettings) {
@@ -41,6 +42,12 @@ class DragHandleWidget extends WidgetType {
       el.style.position = "absolute";
       el.style.top = "50%";
       el.style.transform = `translateY(-50%) translateX(calc(-100% - ${this.offset}em))`;
+      // Set position:relative on the parent .cm-line so absolute positioning works.
+      // Done here to avoid a :has CSS selector (flagged as a performance concern).
+      requestAnimationFrame(() => {
+        const line = el.closest(".cm-line") as HTMLElement | null;
+        if (line) line.style.position = "relative";
+      });
     }
     return el;
   }
@@ -167,7 +174,13 @@ class ReorderPlugin implements PluginValue {
     activeDrag = null;
   }
 
+  private isLivePreview(view: EditorView): boolean {
+    return view.state.field(editorLivePreviewField, false) === true;
+  }
+
   private buildDecorations(view: EditorView): DecorationSet {
+    if (!this.isLivePreview(view)) return Decoration.none;
+
     const widgets: Range<Decoration>[] = [];
     const { from, to } = view.viewport;
     const doc = view.state.doc;
@@ -180,8 +193,18 @@ class ReorderPlugin implements PluginValue {
       if (match) {
         if (nextToBullet) {
           const indentLen = match[1].length;
+          // Check if the next line is a child (deeper indent) — if so use the wider offset
+          const hasChildren = (() => {
+            if (line.number >= doc.lines) return false;
+            const next = doc.line(line.number + 1);
+            const m = LIST_ITEM_RE.exec(next.text);
+            return m ? m[1].length > indentLen : false;
+          })();
+          const offset = hasChildren
+            ? currentSettings.handleOffsetWithChildren
+            : currentSettings.handleOffset;
           widgets.push(
-            Decoration.widget({ widget: new DragHandleWidget(true, currentSettings.handleOffset), side: -1 })
+            Decoration.widget({ widget: new DragHandleWidget(true, offset), side: -1 })
               .range(line.from + indentLen)
           );
         } else {
